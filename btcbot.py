@@ -3,7 +3,8 @@ import discord
 from discord.ext import tasks
 import ccxt
 import pandas as pd
-from ta.momentum import RSIIndicator
+
+
 
 TOKEN = os.getenv("TOKEN")
 CHANNEL_ID = 1509736189798650079
@@ -12,6 +13,19 @@ exchange = ccxt.binance()
 
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
+
+
+
+def rsi(series, period=14):
+    delta = series.diff()
+
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+
+    rs = gain / loss
+    return 100 - (100 / (1 + rs))
+
+
 
 
 def analyze_timeframe(symbol, timeframe, limit=100):
@@ -24,9 +38,7 @@ def analyze_timeframe(symbol, timeframe, limit=100):
 
     df['close'] = df['close'].astype(float)
 
-    rsi = RSIIndicator(df['close'], window=14)
-    df['rsi'] = rsi.rsi()
-
+    df['rsi'] = rsi(df['close'])
     df['ema_fast'] = df['close'].ewm(span=9).mean()
     df['ema_slow'] = df['close'].ewm(span=21).mean()
 
@@ -45,6 +57,9 @@ def analyze_timeframe(symbol, timeframe, limit=100):
         trend -= 0.5
 
     return trend, latest['rsi'], float(latest['close']), df
+
+
+
 
 def get_prediction():
 
@@ -76,6 +91,9 @@ def get_prediction():
         "confidence": int(confidence),
         "reversal_minutes": reversal_minutes
     }
+
+
+
 
 @client.event
 async def on_ready():
@@ -114,7 +132,7 @@ async def btc_loop():
             inline=False
         )
 
-        embed.set_footer(text="Multi-timeframe trend model (educational)")
+        embed.set_footer(text="Multi-timeframe model (no external TA libs)")
 
         await channel.send(embed=embed)
 
@@ -122,6 +140,8 @@ async def btc_loop():
 
     except Exception as e:
         print("Error:", e)
+
+
 
 
 client.run(TOKEN)
