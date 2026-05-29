@@ -9,7 +9,8 @@ from ta.momentum import RSIIndicator
 # CONFIG
 # =========================
 
-TOKEN = "MTUwOTczODE0NTY1NzM4OTI1OA.GjwoVg.UioTdMG4K4YzEZb6-_HEwO0L4vdgw6urGuZIcs"
+import os
+TOKEN = os.getenv("TOKEN")
 CHANNEL_ID = 1509736189798650079
 
 # =========================
