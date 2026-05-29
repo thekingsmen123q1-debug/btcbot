@@ -2,7 +2,6 @@ import os
 import discord
 from discord.ext import tasks
 import ccxt
-import pandas as pd
 
 TOKEN = os.getenv("TOKEN")
 CHANNEL_ID = 1509736189798650079
@@ -13,84 +12,26 @@ intents = discord.Intents.default()
 client = discord.Client(intents=intents)
 
 
+def simple_signal():
+    ticker = exchange.fetch_ticker('BTC/USDT')
 
-def rsi(series, period=14):
-    delta = series.diff()
+    price = ticker['last']
+    change = ticker['percentage']
 
-    gain = (delta.where(delta > 0, 0)).rolling(period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(period).mean()
-
-    rs = gain / loss
-    return 100 - (100 / (1 + rs))
-
-
-
-
-def analyze_timeframe(symbol, timeframe, limit=100):
-
-    candles = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
-
-    df = pd.DataFrame(candles, columns=[
-        'timestamp','open','high','low','close','volume'
-    ])
-
-    df['close'] = df['close'].astype(float)
-
-    df['rsi'] = rsi(df['close'])
-    df['ema_fast'] = df['close'].ewm(span=9).mean()
-    df['ema_slow'] = df['close'].ewm(span=21).mean()
-
-    latest = df.iloc[-1]
-
-    trend = 0
-
-    if latest['ema_fast'] > latest['ema_slow']:
-        trend += 1
-    else:
-        trend -= 1
-
-    if latest['rsi'] < 45:
-        trend += 0.5
-    elif latest['rsi'] > 55:
-        trend -= 0.5
-
-    return trend, latest['rsi'], float(latest['close']), df
-
-
-
-
-def get_prediction():
-
-    t1, rsi1, price, df1 = analyze_timeframe('BTC/USDT', '1m')
-    t2, rsi2, _, _ = analyze_timeframe('BTC/USDT', '5m')
-    t3, rsi3, _, _ = analyze_timeframe('BTC/USDT', '1h')
-
-    total_score = (t1 * 0.5) + (t2 * 1.5) + (t3 * 2.5)
-
-    direction = "NEUTRAL ⏳"
-    confidence = 50
-
-    if total_score > 1.5:
+    if change > 0.2:
         direction = "UP 🟢"
-        confidence = min(95, 55 + total_score * 10)
-
-    elif total_score < -1.5:
+    elif change < -0.2:
         direction = "DOWN 🔴"
-        confidence = min(95, 55 + abs(total_score) * 10)
+    else:
+        direction = "NEUTRAL ⏳"
 
-    volatility = df1['close'].pct_change().abs().rolling(10).mean().iloc[-1]
-
-    reversal_minutes = int(8 + (1 / (volatility + 0.0001)) * 2)
+    confidence = min(95, max(50, abs(change) * 10 + 50))
 
     return {
         "price": price,
-        "rsi": rsi1,
         "direction": direction,
-        "confidence": int(confidence),
-        "reversal_minutes": reversal_minutes
+        "confidence": int(confidence)
     }
-
-
 
 
 @client.event
@@ -105,10 +46,10 @@ async def btc_loop():
     channel = client.get_channel(CHANNEL_ID)
 
     try:
-        data = get_prediction()
+        data = simple_signal()
 
         embed = discord.Embed(
-            title="₿ BTC MARKET SIGNAL",
+            title="₿ BTC SIGNAL",
             color=0x00ff00 if "UP" in data["direction"] else 0xff0000
         )
 
@@ -122,12 +63,6 @@ async def btc_loop():
             name="Price",
             value=f"${data['price']:.2f}",
             inline=True
-        )
-
-        embed.add_field(
-            name="Reversal Estimate",
-            value=f"⏳ ~{data['reversal_minutes']} minutes",
-            inline=False
         )
 
         await channel.send(embed=embed)
