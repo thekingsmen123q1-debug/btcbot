@@ -4,8 +4,6 @@ from discord.ext import tasks
 import ccxt
 import pandas as pd
 
-
-
 TOKEN = os.getenv("TOKEN")
 CHANNEL_ID = 1509736189798650079
 
@@ -19,8 +17,8 @@ client = discord.Client(intents=intents)
 def rsi(series, period=14):
     delta = series.diff()
 
-    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+    gain = (delta.where(delta > 0, 0)).rolling(period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(period).mean()
 
     rs = gain / loss
     return 100 - (100 / (1 + rs))
@@ -64,8 +62,8 @@ def analyze_timeframe(symbol, timeframe, limit=100):
 def get_prediction():
 
     t1, rsi1, price, df1 = analyze_timeframe('BTC/USDT', '1m')
-    t2, rsi2, _, df2 = analyze_timeframe('BTC/USDT', '5m')
-    t3, rsi3, _, df3 = analyze_timeframe('BTC/USDT', '1h')
+    t2, rsi2, _, _ = analyze_timeframe('BTC/USDT', '5m')
+    t3, rsi3, _, _ = analyze_timeframe('BTC/USDT', '1h')
 
     total_score = (t1 * 0.5) + (t2 * 1.5) + (t3 * 2.5)
 
@@ -132,16 +130,12 @@ async def btc_loop():
             inline=False
         )
 
-        embed.set_footer(text="Multi-timeframe model (no external TA libs)")
-
         await channel.send(embed=embed)
 
         print("Signal sent")
 
     except Exception as e:
         print("Error:", e)
-
-
 
 
 client.run(TOKEN)
