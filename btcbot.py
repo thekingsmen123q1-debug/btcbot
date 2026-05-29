@@ -1,7 +1,11 @@
 import os
 import discord
-from discord.ext import tasks
+from discord.ext import tasks, commands
 import ccxt
+
+# =========================
+# CONFIG
+# =========================
 
 TOKEN = os.getenv("TOKEN")
 CHANNEL_ID = 1509736189798650079
@@ -9,8 +13,11 @@ CHANNEL_ID = 1509736189798650079
 exchange = ccxt.coinbase()
 
 intents = discord.Intents.default()
-client = discord.Client(intents=intents)
 
+bot = commands.Bot(
+    command_prefix="!",
+    intents=intents
+)
 
 # =========================
 # PREDICTION ENGINE
@@ -36,7 +43,15 @@ def get_prediction():
         / open_price
     ) * 100
 
-    candle_range = high_price - low_price
+    # =========================
+    # PRICE TARGET PREDICTION
+    # =========================
+
+    predicted_move = move_percent * 1.8
+
+    predicted_price = current_price + (
+        current_price * (predicted_move / 100)
+    )
 
     # =========================
     # DIRECTION LOGIC
@@ -45,31 +60,13 @@ def get_prediction():
     direction = "NEUTRAL ⏳"
     confidence = 50
 
-    # bullish candle
     if current_price > open_price:
-
         direction = "UP 🟢"
-
         confidence += abs(move_percent) * 120
 
-        # strong bullish push
-        if current_price > (
-            open_price + (candle_range * 0.6)
-        ):
-            confidence += 10
-
-    # bearish candle
     elif current_price < open_price:
-
         direction = "DOWN 🔴"
-
         confidence += abs(move_percent) * 120
-
-        # strong bearish push
-        if current_price < (
-            open_price - (candle_range * 0.6)
-        ):
-            confidence += 10
 
     confidence = int(min(95, confidence))
 
@@ -77,7 +74,7 @@ def get_prediction():
     # REVERSAL LOGIC
     # =========================
 
-    reversal = "LOW"
+    reversal = "LOW 🔵"
 
     if abs(move_percent) < 0.08:
         reversal = "HIGH ⚠️"
@@ -87,7 +84,7 @@ def get_prediction():
 
     return {
         "price": current_price,
-        "open": open_price,
+        "predicted_price": predicted_price,
         "move": move_percent,
         "direction": direction,
         "confidence": confidence,
@@ -96,25 +93,32 @@ def get_prediction():
 
 
 # =========================
-# BOT STARTUP
+# BOT READY
 # =========================
 
-@client.event
+@bot.event
 async def on_ready():
 
-    print(f"Logged in as {client.user}")
+    print(f"Logged in as {bot.user}")
 
-    channel = await client.fetch_channel(CHANNEL_ID)
+    try:
+        synced = await bot.tree.sync()
+        print(f"Synced {len(synced)} slash commands")
 
-    await channel.send(
-        "BTC prediction bot online ✅"
-    )
+        channel = await bot.fetch_channel(CHANNEL_ID)
+
+        await channel.send(
+            "BTC prediction bot online ✅"
+        )
+
+    except Exception as e:
+        print("Startup error:", e)
 
     btc_loop.start()
 
 
 # =========================
-# LOOP
+# AUTO PREDICTION LOOP
 # =========================
 
 @tasks.loop(minutes=5)
@@ -122,7 +126,7 @@ async def btc_loop():
 
     try:
 
-        channel = await client.fetch_channel(CHANNEL_ID)
+        channel = await bot.fetch_channel(CHANNEL_ID)
 
         data = get_prediction()
 
@@ -158,6 +162,12 @@ async def btc_loop():
         )
 
         embed.add_field(
+            name="Predicted Price",
+            value=f"${data['predicted_price']:.2f}",
+            inline=False
+        )
+
+        embed.add_field(
             name="5M Candle Move",
             value=f"{data['move']:.3f}%",
             inline=True
@@ -170,7 +180,7 @@ async def btc_loop():
         )
 
         embed.set_footer(
-            text="Live candle momentum prediction"
+            text="Live BTC momentum prediction model"
         )
 
         await channel.send(embed=embed)
@@ -182,7 +192,59 @@ async def btc_loop():
 
 
 # =========================
-# RUN
+# SLASH COMMAND
 # =========================
 
-client.run(TOKEN)
+@bot.tree.command(
+    name="btc",
+    description="Get instant BTC prediction"
+)
+async def btc(interaction: discord.Interaction):
+
+    data = get_prediction()
+
+    embed = discord.Embed(
+        title="₿ LIVE BTC PREDICTION",
+        color=0x00ff00
+    )
+
+    embed.add_field(
+        name="Prediction",
+        value=data["direction"],
+        inline=False
+    )
+
+    embed.add_field(
+        name="Confidence",
+        value=f"{data['confidence']}%",
+        inline=True
+    )
+
+    embed.add_field(
+        name="Current Price",
+        value=f"${data['price']:.2f}",
+        inline=True
+    )
+
+    embed.add_field(
+        name="Predicted Price",
+        value=f"${data['predicted_price']:.2f}",
+        inline=False
+    )
+
+    embed.add_field(
+        name="Reversal Chance",
+        value=data["reversal"],
+        inline=False
+    )
+
+    await interaction.response.send_message(
+        embed=embed
+    )
+
+
+# =========================
+# RUN BOT
+# =========================
+
+bot.run(TOKEN)
