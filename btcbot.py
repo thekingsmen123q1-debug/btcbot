@@ -102,9 +102,6 @@ async def on_ready():
     print(f"Logged in as {bot.user}")
 
     try:
-        synced = await bot.tree.sync()
-        print(f"Synced {len(synced)} slash commands")
-
         channel = await bot.fetch_channel(CHANNEL_ID)
 
         await channel.send(
@@ -195,11 +192,11 @@ async def btc_loop():
 # SLASH COMMAND
 # =========================
 
-@bot.tree.command(
+@bot.slash_command(
     name="btc",
     description="Get instant BTC prediction"
 )
-async def btc(interaction: discord.Interaction):
+async def btc(ctx):
 
     data = get_prediction()
 
@@ -238,9 +235,7 @@ async def btc(interaction: discord.Interaction):
         inline=False
     )
 
-    await interaction.response.send_message(
-        embed=embed
-    )
+    await ctx.respond(embed=embed)
 
 
 # =========================
